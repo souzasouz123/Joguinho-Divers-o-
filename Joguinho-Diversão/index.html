@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zombie Survival JS</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #1a1a1a;
+            color: white;
+            font-family: Arial, sans-serif;
+            overflow: hidden; /* Impede scroll */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #game-ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            pointer-events: none;
+        }
+
+        canvas {
+            background-color: #2c3e50;
+            border: 4px solid #34495e;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            cursor: crosshair;
+        }
+
+        .stats {
+            font-size: 24px;
+            margin-bottom: 5px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,1);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-ui">
+        <div class="stats">Pontos: <span id="score">0</span></div>
+        <div class="stats">Vida: <span id="health">100</span>%</div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const healthEl = document.getElementById('health');
+
+        // Configuração do tamanho do jogo
+        canvas.width = window.innerWidth * 0.8;
+        canvas.height = window.innerHeight * 0.8;
+
+        // Variáveis de estado
+        let score = 0;
+        let health = 100;
+        let gameActive = true;
+
+        // Controles
+        const keys = {};
+        window.addEventListener('keydown', e => keys[e.code] = true);
+        window.addEventListener('keyup', e => keys[e.code] = false);
+
+        // Classes do Jogo
+        class Player {
+            constructor() {
+                this.x = canvas.width / 2;
+                this.y = canvas.height / 2;
+                this.radius = 15;
+                this.color = '#2ecc71';
+                this.speed = 4;
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+                ctx.closePath();
+            }
+
+            update() {
+                if (keys['KeyW'] && this.y > this.radius) this.y -= this.speed;
+                if (keys['KeyS'] && this.y < canvas.height - this.radius) this.y += this.speed;
+                if (keys['KeyA'] && this.x > this.radius) this.x -= this.speed;
+                if (keys['KeyD'] && this.x < canvas.width - this.radius) this.x += this.speed;
+                this.draw();
+            }
+        }
+
+        class Projectile {
+            constructor(x, y, angle) {
+                this.x = x;
+                this.y = y;
+                this.radius = 4;
+                this.color = '#f1c40f';
+                this.velocity = {
+                    x: Math.cos(angle) * 8,
+                    y: Math.sin(angle) * 8
+                };
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+                ctx.closePath();
+            }
+
+            update() {
+                this.x += this.velocity.x;
+                this.y += this.velocity.y;
+                this.draw();
+            }
+        }
+
+        class Enemy {
+            constructor(x, y, type) {
+                this.x = x;
+                this.y = y;
+                this.radius = type.radius;
+                this.color = type.color;
+                this.speed = type.speed;
+                this.health = type.health;
+                this.points = type.points;
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+                ctx.closePath();
+            }
+
+            update() {
+                const angle = Math.atan2(player.y - this.y, player.x - this.x);
+                this.x += Math.cos(angle) * this.speed;
+                this.y += Math.sin(angle) * this.speed;
+                this.draw();
+            }
+        }
+
+        // Instâncias
+        const player = new Player();
+        const projectiles = [];
+        const enemies = [];
+
+        // Tipos de Inimigos
+        const enemyTypes = [
+            { name: 'Normal', color: '#e74c3c', radius: 15, speed: 1.5, health: 1, points: 10 },
+            { name: 'Rápido', color: '#e67e22', radius: 10, speed: 3, health: 1, points: 20 },
+            { name: 'Tanque', color: '#8e44ad', radius: 25, speed: 0.8, health: 5, points: 50 }
+        ];
+
+        // Disparar
+        window.addEventListener('mousedown', (e) => {
+            if (!gameActive) return;
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            const angle = Math.atan2(mouseY - player.y, mouseX - player.x);
+            projectiles.push(new Projectile(player.x, player.y, angle));
+        });
+
+        // Gerar Inimigos
+        function spawnEnemy() {
+            if (!gameActive) return;
+            const type = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
+            let x, y;
+
+            // Spawn fora da tela
+            if (Math.random() < 0.5) {
+                x = Math.random() < 0.5 ? -30 : canvas.width + 30;
+                y = Math.random() * canvas.height;
+            } else {
+                x = Math.random() * canvas.width;
+                y = Math.random() < 0.5 ? -30 : canvas.height + 30;
+            }
+            enemies.push(new Enemy(x, y, type));
+            setTimeout(spawnEnemy, 1500 - (score / 10)); // Dificuldade aumenta
+        }
+
+        // Loop Principal
+        function animate() {
+            if (!gameActive) return;
+            requestAnimationFrame(animate);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            player.update();
+
+            // Lógica Projéteis
+            projectiles.forEach((proj, pIndex) => {
+                proj.update();
+                // Remover se sair da tela
+                if (proj.x < 0 || proj.x > canvas.width || proj.y < 0 || proj.y > canvas.height) {
+                    projectiles.splice(pIndex, 1);
+                }
+            });
+
+            // Lógica Inimigos
+            enemies.forEach((enemy, eIndex) => {
+                enemy.update();
+
+                // Colisão Inimigo x Player
+                const dist = Math.hypot(player.x - enemy.x, player.y - enemy.y);
+                if (dist - enemy.radius - player.radius < 1) {
+                    health -= 0.5;
+                    healthEl.innerText = Math.floor(health);
+                    if (health <= 0) {
+                        gameActive = false;
+                        alert("GAME OVER! Pontuação Final: " + score);
+                        location.reload();
+                    }
+                }
+
+                // Colisão Inimigo x Projétil
+                projectiles.forEach((proj, pIndex) => {
+                    const distProj = Math.hypot(proj.x - enemy.x, proj.y - enemy.y);
+                    if (distProj - enemy.radius - proj.radius < 1) {
+                        enemy.health--;
+                        projectiles.splice(pIndex, 1);
+                        
+                        if (enemy.health <= 0) {
+                            score += enemy.points;
+                            scoreEl.innerText = score;
+                            enemies.splice(eIndex, 1);
+                        }
+                    }
+                });
+            });
+        }
+
+        spawnEnemy();
+        animate();
+    </script>
+</body>
+</html>
